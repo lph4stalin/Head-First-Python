@@ -1,8 +1,18 @@
 from flask import Flask, render_template, request, escape
 from vsearch import search4letters
 
+from DBcm import  UseDatabase
+
 
 app = Flask(__name__)
+
+# 将连接属性字典增加到 Web 应用的配置中
+app.config['dbconfig'] = {
+        'host': '127.0.0.1',
+        'user': 'vsearch',
+        'password': 'vsearchpasswd',
+        'database': 'vsearchlogDB',
+    }
 
 # 这里修饰器的作用是：当访问路径是 '/' 的时候，返回 hello 函数
 # route 方法已经具有作为服务器的功能：输入 path，返回给定的内容，并自动用 http 协议包装
@@ -32,14 +42,14 @@ def entry_page():
 @app.route('/viewlog')
 def view_the_log():
     contents = []
-    with open('vsearch.log') as log:
-        for line in log:
-            content = []
-            for item in line.split('|'):
-                item = escape(item)
-                content.append(item)
-            contents.append(content)
-    titles = ('From Data', 'Remote_addr', 'User_agent', 'Results')
+    with UseDatabase(app.config['dbconfig']) as cursor:
+        _SQL = """select phrase, letters, ip, browser_string, results from log"""
+        # 执行 SQL 语句
+        cursor.execute(_SQL)
+        # 获取执行内容
+        contents = cursor.fetchall()
+
+    titles = ('Phrase', 'Letters', 'Remote_addr', 'User_agent', 'Results')
     return render_template('viewlog.html',
                            the_title='View log',
                            the_row_titles=titles,
@@ -47,8 +57,18 @@ def view_the_log():
 
 
 def log_request(req, res):
-    with open('vsearch.log', 'a') as log:
-        print(req.form, req.remote_addr, req.user_agent, res, file=log, sep='|')
+    """Log details of the web request and the results."""
+    # 连接数据库
+    with UseDatabase(app.config['dbconfig']) as cursor:
+        _SQL = """insert into log 
+          (phrase, letters, ip, browser_string, results) 
+          values 
+          (%s, %s, %s, %s, %s)"""
+        cursor.execute(_SQL, (req.form['phrase'],
+                              req.form['letters'],
+                              req.remote_addr,
+                              req.user_agent.browser,
+                              res, ))
 
 
 if __name__ == '__main__':
