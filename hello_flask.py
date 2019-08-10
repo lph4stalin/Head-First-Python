@@ -2,6 +2,9 @@ from flask import Flask, render_template, request, escape, session
 from vsearch import search4letters
 from DBcm import  UseDatabase
 from checker import check_logged_in
+import mysql.connector
+from threading import Thread
+import time
 
 
 app = Flask(__name__)
@@ -27,7 +30,11 @@ def do_search():
     letters = request.form['letters']
     title = 'Here are your results: '
     results = str(search4letters(phrase, letters))
-    log_request(request, results)
+    try:
+        t = Thread(target=log_request, args=(request, results))
+        t.start()
+    except Exception as err:
+        print('***** Logging failed with this error:', str(err))
     return render_template('results.html', the_title=title, the_results=results, the_phrase=phrase, the_letters=letters,)
 
 
@@ -43,13 +50,17 @@ def entry_page():
 @check_logged_in
 def view_the_log():
     contents = []
-    with UseDatabase(app.config['dbconfig']) as cursor:
-        _SQL = """select phrase, letters, ip, browser_string, results from log"""
-        # 执行 SQL 语句
-        cursor.execute(_SQL)
-        # 获取执行内容
-        contents = cursor.fetchall()
-
+    try:
+        with UseDatabase(app.config['dbconfig']) as cursor:
+            _SQL = """select phrase, letters, ip, browser_string, results from log"""
+            # 执行 SQL 语句
+            cursor.execute(_SQL)
+            # 获取执行内容
+            contents = cursor.fetchall()
+    except mysql.connector.errors.InterfaceError as err:
+        print('Is your database switched on? Error:', str(err))
+    except Exception as err:
+        print('Something went wrong:', str(err))
     titles = ('Phrase', 'Letters', 'Remote_addr', 'User_agent', 'Results')
     return render_template('viewlog.html',
                            the_title='View log',
@@ -59,6 +70,7 @@ def view_the_log():
 
 def log_request(req, res):
     """Log details of the web request and the results."""
+    time.sleep(15)
     # 连接数据库
     with UseDatabase(app.config['dbconfig']) as cursor:
         _SQL = """insert into log 
