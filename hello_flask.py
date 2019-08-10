@@ -1,7 +1,7 @@
-from flask import Flask, render_template, request, escape
+from flask import Flask, render_template, request, escape, session
 from vsearch import search4letters
-
 from DBcm import  UseDatabase
+from checker import check_logged_in
 
 
 app = Flask(__name__)
@@ -14,13 +14,13 @@ app.config['dbconfig'] = {
         'database': 'vsearchlogDB',
     }
 
+app.secret_key = 'YouWillNeverGuess'
+
 # 这里修饰器的作用是：当访问路径是 '/' 的时候，返回 hello 函数
 # route 方法已经具有作为服务器的功能：输入 path，返回给定的内容，并自动用 http 协议包装
 # @app.route('/')
 # def hello():
 #     return redirect('/entry')
-
-
 @app.route('/search4', methods=['GET', 'POST'])
 def do_search():
     phrase = request.form['phrase']
@@ -40,6 +40,7 @@ def entry_page():
 
 
 @app.route('/viewlog')
+@check_logged_in
 def view_the_log():
     contents = []
     with UseDatabase(app.config['dbconfig']) as cursor:
@@ -69,6 +70,18 @@ def log_request(req, res):
                               req.remote_addr,
                               req.user_agent.browser,
                               res, ))
+
+
+@app.route('/login')
+def do_login():
+    session['logged_in'] = True
+    return 'You are now logged in.'
+
+
+@app.route('/logout')
+def do_logout():
+    session.pop('logged_in')
+    return 'You are now logged out.'
 
 
 if __name__ == '__main__':
